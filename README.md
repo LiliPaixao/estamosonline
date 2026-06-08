@@ -1,86 +1,161 @@
-# Estamos Online - Bootstrap do Projeto
+# Estamos Online
 
-Este é o repositório base para o desenvolvimento da aplicação. O projeto utiliza uma infraestrutura Docker customizada (sem a dependência do Laravel Sail) contendo PHP-FPM, Nginx, MySQL e Node.js de forma totalmente isolada.
+Plataforma SaaS da **Nyx Technology** voltada para MEIs e pequenas empresas. Oferece site institucional de marketing e um sistema de agendamento online que pode ser compartilhado via Instagram e WhatsApp.
 
-## 📋 Pré-requisitos
-A pessoa que for testar ou desenvolver este código precisa ter apenas o **Docker** e o **Docker Compose** instalados na máquina física. Não há necessidade de possuir PHP, Composer, MySQL ou Node instalados localmente.
+## 🏗️ Arquitetura
+
+```
+http://localhost/              → Site institucional (landing page)
+http://localhost/admin         → Painel administrativo (Filament)
+http://localhost/agenda/{slug} → Página pública de agendamento do profissional
+```
+
+O projeto utiliza infraestrutura Docker customizada (sem Laravel Sail) com PHP-FPM, Nginx, MySQL e Node.js totalmente isolados.
 
 ---
 
-## 🚀 Como Rodar o Projeto do Zero
+## 📋 Pré-requisitos
 
-Siga os passos abaixo no terminal para colocar a aplicação em funcionamento:
+Apenas **Docker** e **Docker Compose** instalados na máquina. Não é necessário ter PHP, Composer, MySQL ou Node instalados localmente.
 
-### 1. Clonar o repositório e acessar a pasta
+---
+
+## 🚀 Como Rodar do Zero
+
+### 1. Clonar o repositório
+
 ```bash
 git clone <URL_DO_SEU_REPOSITORIO_PRIVADO>
 cd estamosonline
 ```
 
-### 2. Configurar o arquivo de ambiente
-Crie o arquivo `.env` a partir do modelo base:
+### 2. Configurar o ambiente
+
 ```bash
 cp .env.example .env
 ```
-Abra o seu arquivo `.env` e verifique se o bloco de conexão com o banco de dados está apontando internamente para o container Docker (usando a porta padrão interna `3306` e o host `db`):
+
+Abra o `.env` e configure o banco de dados:
+
 ```env
 DB_CONNECTION=mysql
 DB_HOST=db
 DB_PORT=3306
 DB_DATABASE=estamosonline
 DB_USERNAME=root
-DB_PASSWORD=xxxx # Insira a senha definida no docker-compose.yml
+DB_PASSWORD=sua_senha
 ```
 
-### 3. Subir e construir os containers
-Monte as imagens locais e inicialize os serviços (Nginx, PHP, MySQL e Node) em segundo plano:
+### 3. Subir os containers
+
+Primeira vez (build completo):
 ```bash
 docker compose up -d --build
 ```
 
-### 4. Instalar as dependências do PHP e gerar as chaves
-Rode a instalação do Composer de dentro do ambiente e gere a chave criptográfica do Laravel:
+Próximas vezes:
+```bash
+docker compose up -d
+```
+
+### 4. Instalar dependências e gerar chave
+
 ```bash
 docker compose exec app composer install
 docker compose exec app php artisan key:generate
 ```
 
-### 5. Executar as migrações do banco de dados
-Crie a estrutura de tabelas do Laravel e do Filament no MySQL:
+### 5. Rodar as migrations
+
 ```bash
 docker compose exec app php artisan migrate
 ```
 
 ---
 
-## 🔐 Como Acessar a Área de Admin (Filament)
+## 🔐 Acessar o Painel Admin (Filament)
 
-Como o banco de dados inicial estará completamente vazio, você deve criar o primeiro usuário administrador através da linha de comando do container:
+Crie o primeiro usuário administrador:
 
-1. No seu terminal, execute:
-   ```bash
-   docker compose exec app php artisan make:filament-user
-   ```
-2. Responda às perguntas fornecendo seu **Nome**, **E-mail** e **Senha**.
-3. Acesse o painel pelo seu navegador de internet através da URL:
-   👉 **`http://localhost/admin`**
-4. Utilize as credenciais recém-criadas para realizar o login.
+```bash
+docker compose exec app php artisan make:filament-user
+```
+
+Acesse: 👉 **`http://localhost/admin`**
 
 ---
 
-## 💡 Comandos Úteis do Docker para o Dia a Dia
+## 📅 Sistema de Agendamento
 
-* **Iniciar os serviços:** `docker compose up -d`
-* **Pausar o ambiente:** `docker compose stop`
-* **Derrubar e destruir os containers:** `docker compose down`
-* **Ver os logs do sistema em tempo real:** `docker compose logs -f`
-* **Acessar o terminal interno do PHP:** `docker compose exec app bash`
+### Como funciona
 
-### 🧹 Limpar Cache (use quando alterar `.env` ou views não atualizarem)
+Cada profissional (MEI) é cadastrado como um **Tenant** e recebe um link único de agendamento:
+
+```
+http://localhost/agenda/{slug-do-profissional}
+```
+
+Esse link é compartilhado na bio do Instagram ou via WhatsApp.
+
+### Fluxo de cadastro no painel (ordem obrigatória)
+
+1. **Profissionais** (`/admin/tenants`) — cadastre o profissional com nome, slug, WhatsApp e tipo de negócio
+2. **Serviços** (`/admin/services`) — cadastre os serviços com nome, duração e preço
+3. **Horários** (`/admin/availabilities`) — defina os dias e horários de atendimento
+4. **Agendamentos** (`/admin/appointments`) — visualize e gerencie os agendamentos recebidos
+
+### Fluxo do cliente
+
+1. Acessa o link do profissional
+2. Escolhe o serviço
+3. Escolhe o dia e horário disponível
+4. Informa nome e WhatsApp
+5. Recebe confirmação na tela
+
+### Lógica de bloqueio de horários
+
+A duração do serviço é respeitada automaticamente. Se um serviço tem 2 horas e é marcado às 10:00, os horários de 10:00 e 11:00 ficam bloqueados para outros clientes. O sistema calcula `ends_at = scheduled_at + duration_minutes` e usa esse intervalo para detectar sobreposições.
+
+### Estrutura do banco
+
+| Tabela | Descrição |
+|---|---|
+| `tenants` | Cada profissional/negócio cadastrado |
+| `services` | Serviços oferecidos por cada profissional |
+| `availabilities` | Dias e horários de atendimento por profissional |
+| `appointments` | Agendamentos realizados pelos clientes |
+
+---
+
+## 💡 Comandos Úteis
+
+| Comando | Descrição |
+|---|---|
+| `docker compose up -d` | Iniciar os serviços |
+| `docker compose stop` | Pausar o ambiente |
+| `docker compose down` | Derrubar e destruir os containers |
+| `docker compose logs -f` | Ver logs em tempo real |
+| `docker compose exec app bash` | Acessar o terminal do PHP |
+
+### 🧹 Limpar Cache
+
+Use sempre que alterar `.env`, criar novas rotas ou views não atualizarem:
 
 ```bash
 docker compose exec app php artisan config:clear
 docker compose exec app php artisan cache:clear
 docker compose exec app php artisan route:clear
 docker compose exec app php artisan view:clear
+```
+
+Ou tudo de uma vez:
+
+```bash
+docker compose exec app php artisan optimize:clear
+```
+
+### 🔑 Corrigir permissões (se der erro 500)
+
+```bash
+docker compose exec app bash -c "chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache && chmod -R 775 /var/www/storage /var/www/bootstrap/cache"
 ```
